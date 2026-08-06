@@ -53,7 +53,7 @@ class TextureValueTest {
         assertNotNull(result);
         assertInstanceOf(SpriteTexture.class, result);
         SpriteTexture sprite = (SpriteTexture) result;
-        assertEquals(ResourceLocation.parse("minecraft:some_sprite"), sprite.getImageLocation());
+        assertEquals(new ResourceLocation("minecraft:some_sprite"), sprite.getImageLocation());
     }
 
     /**
@@ -68,7 +68,7 @@ class TextureValueTest {
         assertNotNull(result);
         assertInstanceOf(SpriteTexture.class, result);
         SpriteTexture sprite = (SpriteTexture) result;
-        assertEquals(ResourceLocation.parse("minecraft:sprite_path"), sprite.getImageLocation());
+        assertEquals(new ResourceLocation("minecraft:sprite_path"), sprite.getImageLocation());
         assertEquals(0, sprite.spritePosition.getX());
         assertEquals(1, sprite.spritePosition.getY());
         assertEquals(2, sprite.spriteSize.getWidth());

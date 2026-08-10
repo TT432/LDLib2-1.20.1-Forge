@@ -105,7 +105,8 @@ public class ClientProxy {
     public void registerFontStatsOverlay(RegisterGuiOverlaysEvent event) {
         if (Platform.isDevEnv()) {
             // Forge 1.20.1 takes a plain String id here, not a ResourceLocation
-            event.registerAboveAll(LDLib2.id("font_stats").toString(), LDFontStatsOverlay.INSTANCE);
+            // Forge 1.20.1 registerAboveAll 只收裸 id（内部自行拼命名空间，传 "ns:path" 会拼成 ldlib2:ldlib2:font_stats）
+            event.registerAboveAll("font_stats", LDFontStatsOverlay.INSTANCE);
         }
     }
 

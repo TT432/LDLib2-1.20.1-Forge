@@ -1,6 +1,8 @@
 package com.lowdragmc.lowdraglib2.client;
 
 import com.lowdragmc.lowdraglib2.LDLib2;
+import com.lowdragmc.lowdraglib2.Platform;
+import com.lowdragmc.lowdraglib2.client.font.LDFontManager;
 import com.lowdragmc.lowdraglib2.editor.resource.EditorResourceEvent;
 import com.lowdragmc.lowdraglib2.editor.resource.ResourceInstance;
 import com.lowdragmc.lowdraglib2.editor.resource.TexturesResource;
@@ -13,12 +15,16 @@ import com.lowdragmc.lowdraglib2.gui.ui.styletemplate.Sprites;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.commands.CommandSourceStack;
+import com.lowdragmc.lowdraglib2.client.font.LDFontManager;
+import com.lowdragmc.lowdraglib2.client.font.LDFontStatsOverlay;
+import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.client.event.ScreenEvent;
+import net.minecraftforge.client.gui.overlay.ForgeGui;
 import net.minecraftforge.event.TickEvent;
 
 import java.util.List;
@@ -41,6 +47,24 @@ public class ClientEventListener {
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase == TickEvent.Phase.END) {
             clientTickCount++;
+            // 字体渲染器的两个只能帧间维护的事项（上游 ClientTickEvent.Post 移植并入）：
+            // 字体相关视频设置（原版无事件）与光栅字形尺寸按时间驱逐
+            LDFontManager.INSTANCE.refreshVanillaFontOptions();
+            LDFontManager.INSTANCE.evictStaleRasterSizes();
+        }
+    }
+
+    /**
+     * TEMPORARY: the statistics overlay is a HUD layer, and HUD layers are drawn before the open screen rather
+     * than over it, so on a screen it would sit behind the very interface it is reporting on. Drawing it again
+     * here puts it on top. See {@link LDFontStatsOverlay}.
+     */
+    @SubscribeEvent
+    public static void onScreenRendered(ScreenEvent.Render.Post event) {
+        if (Platform.isDevEnv()) {
+            LDFontStatsOverlay.INSTANCE.render((ForgeGui) Minecraft.getInstance().gui,
+                    event.getGuiGraphics(), event.getPartialTick(),
+                    event.getScreen().width, event.getScreen().height);
         }
     }
 

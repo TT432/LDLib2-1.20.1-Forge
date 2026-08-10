@@ -11,6 +11,8 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
 import javax.annotation.ParametersAreNonnullByDefault;
+import java.nio.file.Path;
+import java.util.List;
 
 @OnlyIn(Dist.CLIENT)
 @ParametersAreNonnullByDefault
@@ -50,6 +52,13 @@ public class ModularUIScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    @Override
+    public void onFilesDrop(List<Path> paths) {
+        if (!modularUI.onFilesDrop(paths.stream().map(Path::toFile).toList())) {
+            super.onFilesDrop(paths);
+        }
     }
 
     public void renderBackground(GuiGraphics guiGraphics) {

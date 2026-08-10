@@ -33,6 +33,7 @@ import com.lowdragmc.lowdraglib2.syncdata.annotation.SkipPersistedValue;
 import com.lowdragmc.lowdraglib2.utils.PersistedParser;
 import com.lowdragmc.lowdraglib2.utils.TagBuilder;
 import com.lowdragmc.lowdraglib2.utils.XmlUtils;
+import com.lowdragmc.lowdraglib2.gui.ui.utils.KeyState;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
@@ -1174,6 +1175,32 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
     }
 
     /**
+     * Collects the tooltips this element wants to display while it is hovered.
+     * <p>
+     * It follows the exact same resolution order that {@link ModularUI} uses while rendering: the
+     * {@link UIEvents#HOVER_TOOLTIPS} event wins, and the tooltips of the style are the fallback.
+     * It does not walk up to the parents.
+     *
+     * @return the tooltips of this element, or {@code null} if it provides none.
+     */
+    @Nullable
+    public HoverTooltips collectHoverTooltips() {
+        var event = UIEvent.create(UIEvents.HOVER_TOOLTIPS);
+        event.hasBubblePhase = false;
+        event.hasCapturePhase = false;
+        event.target = this;
+        UIEventDispatcher.dispatchDirectEvent(event, false);
+        if (event.hoverTooltips != null) {
+            return event.hoverTooltips;
+        }
+        var styleTooltips = getStyle().tooltips();
+        if (!styleTooltips.isEmpty()) {
+            return new HoverTooltips(styleTooltips.asList(), null, null, null);
+        }
+        return null;
+    }
+
+    /**
      * Start dragging the element. This will call the {@link com.lowdragmc.lowdraglib2.gui.ui.event.DragHandler#startDrag} method.
      */
     public DragHandler startDrag(@Nullable Object draggingObject, @Nullable IGuiTexture dragTexture) {
@@ -1708,22 +1735,19 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
     }
 
     public static boolean isShiftDown() {
-        long id = Minecraft.getInstance().getWindow().getWindow();
-        return InputConstants.isKeyDown(id, GLFW.GLFW_KEY_LEFT_SHIFT) || InputConstants.isKeyDown(id, GLFW.GLFW_KEY_LEFT_SHIFT);
+        return KeyState.isShiftDown();
     }
 
     public static boolean isCtrlDown() {
-        return Screen.hasControlDown();
+        return KeyState.isCtrlDown();
     }
 
     public static boolean isAltDown() {
-        long id = Minecraft.getInstance().getWindow().getWindow();
-        return InputConstants.isKeyDown(id, GLFW.GLFW_KEY_LEFT_ALT) || InputConstants.isKeyDown(id, GLFW.GLFW_KEY_RIGHT_ALT);
+        return KeyState.isAltDown();
     }
 
     public static boolean isKeyDown(int keyCode) {
-        long id = Minecraft.getInstance().getWindow().getWindow();
-        return InputConstants.isKeyDown(id, keyCode);
+        return KeyState.isKeyDown(keyCode);
     }
 
     public boolean isMouseDown(int button) {
@@ -1852,6 +1876,14 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
 
     /**
      * Renders the contents of the GUI element. includes additional background and children
+     *
+     * <p>Prefer overriding {@link #shouldDrawChildren()} or {@link #drawChildren(GUIContext)}:
+     * this method owns two lifecycles a subclass would otherwise have to reproduce by hand — the
+     * {@code overflow: hidden} scissor and the element-colour save/restore — and getting either
+     * wrong strands GL state for everything drawn afterwards.
+     *
+     * <p>Deliberately not {@code final}, despite that: it is public API on a published library and
+     * downstream elements already override it.
      */
     public void drawContents(GUIContext guiContext) {
         // not need to use scissoring if overflow cip defined
@@ -1864,7 +1896,7 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
         if(!isCulled) {
             drawBackgroundAdditional(guiContext);
         }
-        if (!children.isEmpty()) {
+        if (!children.isEmpty() && shouldDrawChildren()) {
             var currentColor = guiContext.elementColor;
             var hasColor = currentColor != -1;
             // we roll back first
@@ -1873,10 +1905,7 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
                 guiContext.resetElementColor();
             }
 
-            var sortedChildren = getSafeSortedChildren();
-            for (int i = sortedChildren.length - 1; i >= 0; i--) {
-                sortedChildren[i].drawInBackground(guiContext);
-            }
+            drawChildren(guiContext);
 
             if (hasColor) {
                 guiContext.graphics.flush();
@@ -1886,6 +1915,26 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
         if (hidden) {
             guiContext.graphics.flush();
             guiContext.disableScissor();
+        }
+    }
+
+    /**
+     * Whether to descend into children at all this frame.
+     *
+     * <p>The seam for elements that stand in for their own subtree — a level-of-detail proxy, a
+     * collapsed container. Returning {@code false} skips the whole subtree, which is where the cost
+     * of a deep tree actually lives: each child would otherwise transform its corners and test the
+     * scissor just to discover it has nothing to draw.
+     */
+    protected boolean shouldDrawChildren() {
+        return true;
+    }
+
+    /** Draws the children, back to front by z-index. */
+    protected void drawChildren(GUIContext guiContext) {
+        var sortedChildren = getSafeSortedChildren();
+        for (int i = sortedChildren.length - 1; i >= 0; i--) {
+            sortedChildren[i].drawInBackground(guiContext);
         }
     }
 

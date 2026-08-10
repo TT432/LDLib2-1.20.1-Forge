@@ -65,6 +65,7 @@ public class Icons {
     public static SpriteTexture EYE_OFF = icon("eye_off");
     public static SpriteTexture FOLDER = icon("folder");
     public static SpriteTexture FILE = icon("file");
+    public static SpriteTexture PROJECT = icon("project");
     public static SpriteTexture IMAGE = icon("image");
     public static SpriteTexture JSON = icon("json");
     public static SpriteTexture LSS = icon("css");
@@ -84,15 +85,10 @@ public class Icons {
     public static SpriteTexture WINDOW_MAXIMIZE = icon("window_maximize");
     public static SpriteTexture WINDOW_RESTORE = icon("window_restore");
     public static SpriteTexture WINDOW_CLOSE = icon("window_close");
+    public static SpriteTexture SORT = icon("sort");
+    public static SpriteTexture FILTER = icon("filter");
+    public static SpriteTexture FILTER_CHECK = icon("filter_check");
     //align
-    public static SpriteTexture ALIGN_H_C = icon("align_horizontal_center");
-    public static SpriteTexture ALIGN_H_D = icon("align_horizontal_distribute");
-    public static SpriteTexture ALIGN_H_L = icon("align_horizontal_left");
-    public static SpriteTexture ALIGN_H_R = icon("align_horizontal_right");
-    public static SpriteTexture ALIGN_V_C = icon("align_vertical_center");
-    public static SpriteTexture ALIGN_V_D = icon("align_vertical_distribute");
-    public static SpriteTexture ALIGN_V_T = icon("align_vertical_top");
-    public static SpriteTexture ALIGN_V_B = icon("align_vertical_bottom");
     public static SpriteTexture COLOR = icon("color");
     public static SpriteTexture PICTURE = icon("picture");
     public static SpriteTexture MATERIAL = icon("material");
@@ -153,6 +149,7 @@ public class Icons {
     public static SpriteTexture INT = icon("int");
     public static SpriteTexture LONG = icon("long");
     public static SpriteTexture STRING = icon("string");
+    public static SpriteTexture ALERT = icon("alert");
 
     static {
         registerFileIcon(IMAGE, "png", "jpg", "jpeg");

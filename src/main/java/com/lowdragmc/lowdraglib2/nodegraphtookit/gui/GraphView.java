@@ -105,6 +105,9 @@ public class GraphView extends UIElement {
     // runtime
     @Nullable
     private GraphModel.CopyPasteData clipboardData = null;
+    /** Top-left of the copied cluster's bounding box, so paste can anchor it at the cursor. */
+    @Nullable
+    private Vector2f clipboardAnchor = null;
     private boolean requireFitGraph = false;
     @Getter
     private GraphChangeset changeset = new GraphChangeset();
@@ -154,6 +157,7 @@ public class GraphView extends UIElement {
 
         graphView.addClass("__node-graph-view_canvas-view__");
         Style.defaultPipeline(this.graphView.getLayout(), l -> l.widthPercent(100).heightPercent(100));
+        Style.defaultPipeline(this.graphView.getGraphViewStyle(), s -> s.maxScale(2f));
 
         panelLayer.addClass("__node-graph-view_panel-layer__");
         Style.defaultPipeline(this.panelLayer.getLayout(), l -> l.positionType(TaffyPosition.ABSOLUTE).width(0).height(0));
@@ -813,46 +817,57 @@ public class GraphView extends UIElement {
      */
     public void wireSelectableElement(@Nullable ModelElement element) {
         if (element == null || !element.isSelectable() || element.getModel() == null) return;
-        var model = element.getModel();
-        element.addEventListener(UIEvents.MOUSE_DOWN, event -> {
-            if (element.allowGraphMouseDown(event)) {
-                var tagetWasSelected = isSelected(model);
-                batchSelection(() -> {
-                    // select node
-                    if (!event.isCtrlDown() && !isSelected(model)) {
-                        clearAllSelected();
-                    }
-                    addSelected(model);
-                    moveElementTop(element);
-                });
+        // Elements can opt out of the body-wide handler and wire their own drag handle instead
+        // (e.g. PlacematElement drags only via its title bar and lets body clicks region-select).
+        if (!element.wantsDefaultMouseWiring()) return;
+        element.addEventListener(UIEvents.MOUSE_DOWN, event -> onGraphElementMouseDown(element, event),
+                element.isGraphMouseDownCaptured());
+    }
 
-                // drag movable — include fully contained nodes when dragging a placemat. Filter
-                // by the MOVABLE capability so non-movable nodes (e.g. BlockNodeModel) don't
-                // start a DragMove that would preempt their own drag-reorder handlers.
-                var movablesList = new ArrayList<>(selected.stream()
-                        .filter(m -> m instanceof IMovable
-                                && (!(m instanceof GraphElementModel gem) || gem.isMovable()))
-                        .toList());
-                for (var sel : new ArrayList<>(movablesList)) {
-                    if (sel instanceof PlacematModel pm) {
-                        java.util.function.Function<com.lowdragmc.lowdraglib2.nodegraphtookit.model.node.AbstractNodeModel, Vector2f> sizeLookup = node -> {
-                            var nodeEl = getModelElement(node);
-                            return nodeEl != null ? new Vector2f(nodeEl.getSizeWidth(), nodeEl.getSizeHeight()) : null;
-                        };
-                        for (var contained : pm.getContainedNodes(sizeLookup)) {
-                            if (contained != null && !movablesList.contains(contained)) {
-                                movablesList.add(contained);
-                            }
-                        }
+    /**
+     * Handles a {@code MOUSE_DOWN} on a graph element: updates selection (respecting Ctrl for
+     * additive selection) and starts a {@link DragMove} for all selected movables. Extracted from
+     * {@link #wireSelectableElement} so opted-out elements (e.g. a placemat's title bar) can reuse the
+     * exact same select + drag behavior from their own handle sub-element.
+     */
+    public void onGraphElementMouseDown(ModelElement element, UIEvent event) {
+        var model = element.getModel();
+        if (model == null || !element.allowGraphMouseDown(event)) return;
+        var tagetWasSelected = isSelected(model);
+        batchSelection(() -> {
+            // select node
+            if (!event.isCtrlDown() && !isSelected(model)) {
+                clearAllSelected();
+            }
+            addSelected(model);
+            moveElementTop(element);
+        });
+
+        // drag movable — include fully contained nodes when dragging a placemat. Filter
+        // by the MOVABLE capability so non-movable nodes (e.g. BlockNodeModel) don't
+        // start a DragMove that would preempt their own drag-reorder handlers.
+        var movablesList = new ArrayList<>(selected.stream()
+                .filter(m -> m instanceof IMovable
+                        && (!(m instanceof GraphElementModel gem) || gem.isMovable()))
+                .toList());
+        for (var sel : new ArrayList<>(movablesList)) {
+            if (sel instanceof PlacematModel pm) {
+                java.util.function.Function<com.lowdragmc.lowdraglib2.nodegraphtookit.model.node.AbstractNodeModel, Vector2f> sizeLookup = node -> {
+                    var nodeEl = getModelElement(node);
+                    return nodeEl != null ? new Vector2f(nodeEl.getSizeWidth(), nodeEl.getSizeHeight()) : null;
+                };
+                for (var contained : pm.getContainedNodes(sizeLookup)) {
+                    if (contained != null && !movablesList.contains(contained)) {
+                        movablesList.add(contained);
                     }
                 }
-                var movables = List.copyOf(movablesList);
-                if (movables.isEmpty()) return;
-                var width = 12;
-                var height = 12;
-                startDrag(new DragMove(tagetWasSelected, model, movables), Icons.MOVE).setDragTexture(- width / 2f, -height / 2f, width, height);
             }
-        }, element.isGraphMouseDownCaptured());
+        }
+        var movables = List.copyOf(movablesList);
+        if (movables.isEmpty()) return;
+        var width = 12;
+        var height = 12;
+        startDrag(new DragMove(tagetWasSelected, model, movables), Icons.MOVE).setDragTexture(- width / 2f, -height / 2f, width, height);
     }
 
     /**
@@ -1121,7 +1136,8 @@ public class GraphView extends UIElement {
                 CommandEvents.COPY.equals(event.command) ||
                 CommandEvents.CUT.equals(event.command) ||
                 CommandEvents.DUPLICATE.equals(event.command) ||
-                CommandEvents.PASTE.equals(event.command)
+                CommandEvents.PASTE.equals(event.command) ||
+                CommandEvents.SAVE.equals(event.command)
         ) {
             event.stopPropagation();
         }
@@ -1141,6 +1157,9 @@ public class GraphView extends UIElement {
             duplicateSelectedElements();
         } else if (CommandEvents.PASTE.equals(event.command)) {
             pasteElements();
+        } else if (CommandEvents.SAVE.equals(event.command)) {
+            var editorView = getFirstAncestorOfType(GraphEditorView.class);
+            if (editorView != null) editorView.notifySaved();
         }
     }
 
@@ -1159,6 +1178,9 @@ public class GraphView extends UIElement {
                 // start drag selection — transient drag-rect feedback, pinned via IMPORTANT.
                 var selectionRect = new UIElement();
                 selectionRect.addClass("__node-graph-view_drag-selection__");
+                // Pure visual overlay: it must not intercept hover/hit-test from the elements it
+                // sweeps over, otherwise their hover highlights flicker as the rect grows.
+                selectionRect.setAllowHitTest(false);
                 Style.importantPipeline(selectionRect.getLayout(), l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .width(0)
                         .height(0));
@@ -1451,7 +1473,7 @@ public class GraphView extends UIElement {
             }
             case "graph.paste" -> {
                 if (clipboardData != null)
-                    yield item.withAction(this::pasteElements);
+                    yield item.withAction(() -> pasteElementsAt(localPosition));
                 yield null;
             }
             case "graph.paste_as_new" -> null; // TODO
@@ -1818,6 +1840,9 @@ public class GraphView extends UIElement {
         } else {
 
             float padding = 20f;
+            // The title bar is drawn inside the top of the placemat, so grow the top gap by its
+            // height to keep the top-most nodes clear of the title.
+            float titleBar = PlacematElement.TITLE_BAR_HEIGHT;
             float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
             float maxX = -Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
             for (var movable : movables) {
@@ -1830,8 +1855,8 @@ public class GraphView extends UIElement {
                 maxX = Math.max(maxX, pos.x + w);
                 maxY = Math.max(maxY, pos.y + h);
             }
-            var placematPos = new Vector2f(minX - padding, minY - padding);
-            var placematSize = new Vector2f(maxX - minX + padding * 2, maxY - minY + padding * 2);
+            var placematPos = new Vector2f(minX - padding, minY - padding - titleBar);
+            var placematSize = new Vector2f(maxX - minX + padding * 2, maxY - minY + padding * 2 + titleBar);
             dispatchCommand(new GraphCommands.CreatePlacematCommand("Placemat", placematPos, placematSize));
         }
     }
@@ -1845,6 +1870,7 @@ public class GraphView extends UIElement {
                 .toList();
         if (selectedModels.isEmpty()) return;
         clipboardData = graph.graphModel.copyElements(selectedModels, Platform.getFrozenRegistry());
+        clipboardAnchor = computeMovableAnchor(selectedModels);
     }
 
     public void cutSelectedElements() {
@@ -1852,9 +1878,44 @@ public class GraphView extends UIElement {
         deleteSelectedElements();
     }
 
+    /** Top-left corner of the given elements' bounding box, or {@code null} if none are positioned. */
+    @Nullable
+    private static Vector2f computeMovableAnchor(List<? extends GraphElementModel> models) {
+        float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
+        boolean found = false;
+        for (var model : models) {
+            if (model instanceof IMovable movable) {
+                var pos = movable.getPosition();
+                minX = Math.min(minX, pos.x);
+                minY = Math.min(minY, pos.y);
+                found = true;
+            }
+        }
+        return found ? new Vector2f(minX, minY) : null;
+    }
+
+    /** Paste at the current cursor position (keyboard shortcut path). */
     public void pasteElements() {
         if (graph == null || clipboardData == null) return;
-        dispatchCommand(new GraphCommands.PasteElementsCommand(clipboardData, new Vector2f(50, 50)));
+        var mui = getModularUI();
+        Vector2f target = null;
+        if (mui != null) {
+            target = snapPosition(getContentViewContainer()
+                    .worldToLocalLayoutOffset(new Vector2f(mui.getLastMouseX(), mui.getLastMouseY())));
+        }
+        pasteElementsAt(target);
+    }
+
+    /**
+     * Pastes the clipboard so the copied cluster's top-left lands at {@code targetLocalPosition}
+     * (content-local coordinates). Falls back to a fixed offset when no target/anchor is available.
+     */
+    public void pasteElementsAt(@Nullable Vector2f targetLocalPosition) {
+        if (graph == null || clipboardData == null) return;
+        Vector2f offset = targetLocalPosition != null && clipboardAnchor != null
+                ? new Vector2f(targetLocalPosition).sub(clipboardAnchor)
+                : new Vector2f(50, 50);
+        dispatchCommand(new GraphCommands.PasteElementsCommand(clipboardData, offset));
     }
 
     public void duplicateSelectedElements() {

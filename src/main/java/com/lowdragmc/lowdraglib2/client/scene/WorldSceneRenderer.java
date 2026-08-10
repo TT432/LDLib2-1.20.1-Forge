@@ -1,5 +1,6 @@
 package com.lowdragmc.lowdraglib2.client.scene;
 
+import com.lowdragmc.lowdraglib2.client.RenderTargetScope;
 import com.lowdragmc.lowdraglib2.client.shader.management.ShaderManager;
 import com.lowdragmc.lowdraglib2.client.utils.glu.Project;
 import com.lowdragmc.lowdraglib2.math.Position;
@@ -66,6 +67,13 @@ public abstract class WorldSceneRenderer {
     protected static final IntBuffer VIEWPORT_BUFFER = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asIntBuffer();
     protected static final FloatBuffer PIXEL_DEPTH_BUFFER = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder()).asFloatBuffer();
     protected static final FloatBuffer OBJECT_POS_BUFFER = ByteBuffer.allocateDirect(3 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
+
+    /**
+     * Where drawing was going when {@link #setupCamera} took over, so {@link #resetCamera} can put it
+     * back. Null outside a camera pass.
+     */
+    @Nullable
+    private RenderTargetScope cameraScope;
 
     enum CacheState {
         UNCREATED,
@@ -322,11 +330,26 @@ public abstract class WorldSceneRenderer {
         return this;
     }
 
+    /**
+     * Draws whatever the GUI has queued up before this scene takes over the render state.
+     * <p>
+     * A scene shares {@code renderBuffers().bufferSource()} with {@link net.minecraft.client.gui.GuiGraphics},
+     * and {@link #drawWorld()} calls the argument-less {@code endBatch()}, which flushes EVERY pending
+     * render type — including GUI geometry recorded earlier in the frame. Without this, that geometry
+     * would be drawn with the scene's viewport and 3D matrices instead of the screen's, so it would
+     * silently vanish. Callers must invoke this before they touch the render state, which for a render
+     * target means before binding it, or the flushed geometry lands in the target.
+     */
+    protected static void flushPendingGuiBatches() {
+        Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
+    }
+
     public void render(@Nonnull PoseStack poseStack, float x, float y, float width, float height, int mouseX, int mouseY) {
         // do not render if the minecraft is reloading
         if (Minecraft.getInstance().getOverlay() instanceof LoadingOverlay) {
             return;
         }
+        flushPendingGuiBatches();
         // setupCamera
         var pose = poseStack.last().pose();
         Vector4f pos = new Vector4f(x, y, 0, 1.0F);
@@ -415,6 +438,10 @@ public abstract class WorldSceneRenderer {
     }
 
     protected void setupCamera(PositionedRect viewport) {
+        // Captured before the viewport is replaced, so resetCamera can put back what was actually
+        // there. The scene may be nested inside a UI visual layer, or inside a UI hosted in another
+        // window; in neither case is the game's main frame the right thing to return to.
+        cameraScope = RenderTargetScope.capture();
         int x = viewport.getPosition().x;
         int y = viewport.getPosition().y;
         int width = viewport.getSize().width;
@@ -463,8 +490,10 @@ public abstract class WorldSceneRenderer {
 
     protected void resetCamera() {
         //reset viewport
-        Minecraft minecraft = Minecraft.getInstance();
-        RenderSystem.viewport(0, 0, minecraft.getWindow().getWidth(), minecraft.getWindow().getHeight());
+        if (cameraScope != null) {
+            cameraScope.close();
+            cameraScope = null;
+        }
 
         //reset projection matrix
         RenderSystem.restoreProjectionMatrix();

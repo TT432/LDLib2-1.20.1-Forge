@@ -1,13 +1,20 @@
 package com.lowdragmc.lowdraglib2.client;
 
 import com.lowdragmc.lowdraglib2.LDLib2Registries;
+import com.lowdragmc.lowdraglib2.Platform;
+import com.lowdragmc.lowdraglib2.client.font.LDFontStatsOverlay;
 import com.lowdragmc.lowdraglib2.client.shader.LDLibShaders;
 import com.lowdragmc.lowdraglib2.client.shader.management.ShaderManager;
 import com.lowdragmc.lowdraglib2.editor.ui.EditorWindow;
 import com.lowdragmc.lowdraglib2.gui.editor.UIEditor;
 import com.lowdragmc.lowdraglib2.gui.holder.ModularUIScreen;
+import com.lowdragmc.lowdraglib2.Platform;
+import com.lowdragmc.lowdraglib2.client.LDLibClientConfig;
+import com.lowdragmc.lowdraglib2.client.font.LDFontStatsOverlay;
 import com.lowdragmc.lowdraglib2.gui.ui.ModularUI;
 import com.lowdragmc.lowdraglib2.gui.ui.UI;
+import com.lowdragmc.lowdraglib2.uitest.UITestRunner;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
@@ -48,8 +55,14 @@ public class ClientCommands {
                             context.getSource().sendSuccess(() -> Component.literal("Opening LDLib2 UI editor"), false);
                             return 1;
                         })));
+        if (Platform.isDevEnv()) {
+            commands.add(createFontCommands());
+        }
         if (LDLib2Registries.SCREEN_TESTS != null && !LDLib2Registries.SCREEN_TESTS.values().isEmpty()) {
             commands.add(createScreenTestCommands());
+        }
+        if (LDLib2Registries.UI_SCENARIOS != null && !LDLib2Registries.UI_SCENARIOS.values().isEmpty()) {
+            commands.add(createUiTestCommands());
         }
         return commands;
     }
@@ -64,6 +77,80 @@ public class ClientCommands {
                 .shouldCloseOnKeyInventory(false);
         minecraft.setScreen(new ModularUIScreen(ui, Component.literal("LDLib2 UI Editor")));
         return true;
+    }
+
+    /**
+     * Runs a UI test scenario inside the running game.
+     *
+     * <p>A command-line run pays for Gradle, mod loading and world creation before the first step,
+     * and none of that changes between attempts. While iterating on a scenario, launch once with
+     * {@code -PldTestKeepOpen} and re-run from here instead.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> createUiTestCommands() {
+        return createLiteral("ldlib2_uitest")
+                .then(createLiteral("list")
+                        .executes(context -> {
+                            var names = UITestRunner.registeredScenarioNames();
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                    names.size() + " scenario(s): " + String.join(", ", names)), false);
+                            return names.size();
+                        }))
+                .then(createLiteral("run")
+                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                .suggests((context, builder) -> {
+                                    builder.suggest("all");
+                                    UITestRunner.registeredScenarioNames().forEach(builder::suggest);
+                                    return builder.buildFuture();
+                                })
+                                .executes(context -> {
+                                    var selection = StringArgumentType.getString(context, "selection");
+                                    var error = UITestRunner.runInteractive(selection);
+                                    if (error != null) {
+                                        context.getSource().sendFailure(Component.literal(error));
+                                        return 0;
+                                    }
+                                    context.getSource().sendSuccess(() -> Component.literal(
+                                            "Running UI scenarios: " + selection
+                                                    + " (results go to the log and report.json)"), false);
+                                    return 1;
+                                })));
+    }
+
+    /**
+     * Development only helpers for eyeballing the text renderer. Not registered outside a dev environment:
+     * the settings they poke live in the client config, which is where users are meant to change them.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> createFontCommands() {
+        return createLiteral("ldlib2_font")
+                .then(createLiteral("mode")
+                        .executes(context -> {
+                            var modes = LDLibClientConfig.FontRenderMode.values();
+                            var next = modes[(LDLibClientConfig.fontRenderMode().ordinal() + 1) % modes.length];
+                            LDLibClientConfig.setFontRenderMode(next);
+                            // the renderers measure text slightly differently, so lay the screen out again
+                            reinitCurrentScreen();
+                            context.getSource().sendSuccess(
+                                    () -> Component.literal("LDLib text: " + next), false);
+                            return 1;
+                        }))
+                .then(createLiteral("stats")
+                        .executes(context -> {
+                            LDFontStatsOverlay.toggle();
+                            context.getSource().sendSuccess(
+                                    () -> Component.literal(LDFontStatsOverlay.describe()), false);
+                            return 1;
+                        }));
+    }
+
+    /**
+     * Rebuilds the open screen so text is measured again with the renderer that is now active.
+     */
+    private static void reinitCurrentScreen() {
+        var minecraft = Minecraft.getInstance();
+        var screen = minecraft.screen;
+        if (screen != null) {
+            screen.resize(minecraft, screen.width, screen.height);
+        }
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> createScreenTestCommands() {

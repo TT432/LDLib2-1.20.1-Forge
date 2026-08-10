@@ -1,5 +1,6 @@
 package com.lowdragmc.lowdraglib2.gui.ui.elements.codeeditor;
 
+import com.lowdragmc.lowdraglib2.gui.LDLibFonts;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.TextArea;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.codeeditor.language.*;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
@@ -7,6 +8,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.rendering.GUIContext;
 import com.lowdragmc.lowdraglib2.gui.ui.style.PropertyRegistry;
 import com.lowdragmc.lowdraglib2.integration.kjs.KJSBindings;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegister;
+import com.lowdragmc.lowdraglib2.gui.ui.utils.KeyState;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -86,7 +88,7 @@ public class CodeEditor extends TextArea {
             switch (event.keyCode) {
                 case GLFW.GLFW_KEY_TAB -> insertText("  ");
                 case GLFW.GLFW_KEY_SLASH -> {
-                    if (Screen.hasControlDown()) {
+                    if (KeyState.isCtrlDown()) {
                         toggleCommentAtBol();
                     }
                 }
@@ -241,7 +243,8 @@ public class CodeEditor extends TextArea {
                 guiContext.pose.pushPose();
                 guiContext.pose.translate(drawX, lineY, 0);
                 guiContext.pose.scale(scale, scale, 1);
-                guiContext.graphics.drawString(
+                LDLibFonts.drawText(
+                        guiContext.graphics,
                         font,
                         textComponent,
                         0,

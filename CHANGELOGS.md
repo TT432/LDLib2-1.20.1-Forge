@@ -1,4 +1,63 @@
 # ChangeLogs
+## v2.2.34
+* Improved graphview api
+* Routed UIElement modifier checks through a swappable key state source
+* Added level of detail and an adaptive grid to the graph view
+* Added an in-client UI test harness
+* Added hosting a ModularUI in its own OS-level window
+* Added dock pane maximize, tab context menus and floating editor views
+* Added UI test scenarios for pane maximize and floating windows
+* Cached directory listings and made the file tree follow the file system
+* Moved the asset browser grid onto the single-pass directory listing
+* Rendered scenes into the surface being drawn on rather than the game window
+* Added capturing a floating window's own framebuffer in the UI test harness
+* Added project icon
+
+## v2.2.33
+* Refactored resource file paths to a game relative form
+* Added direct file resolution for resource paths without a provider
+* Added slider ui element
+* Fixed scene rendering stealing pending gui batches
+* Improved the resource container with a bottom bar and reusable cells
+* Added an asset browser to the resource view
+* Refactored HDR color support
+* Improved Menu to keep open when clicking a toggle entry
+* Added external file drop to import resources
+* Added sorting and resource type filtering to the asset browser
+* Improved graph view default max scale
+* Added opening projects from the asset browser
+* Added recent projects and remembering the asset browser folder per projects
+
+## v2.2.32
+* Improved xei tooltips display
+* Improved LocalSlot to support unlimited stack
+* Fixed immediately appending tooltip
+
+## v2.2.31
+* Added smooth font rendering
+
+## v2.2.30
+* Fixed style resolve crash
+* Improved resource dialog searching
+* Improved ItemLibrary qol
+* Improved FileDialog
+
+## v2.2.29
+* Fixed EnumAccessor weekmap
+* Improved the TreeList to support reordering dragging
+* Improved ngt qol
+* Fixed camera movement
+* Fixed BlockLibrary name
+* Improved transform gizmo
+* Cached dialogAnchor Pos to remove dialog
+* Added fallback missport for ngt deserialization and improved save api
+* Bumped up jei compat
+
+## v2.2.28
+* Fixed fbo clear color
+* Fixed shader defines injection
+* Improved ngt qol
+
 ## v2.2.27
 * Improved draw lines smoothness
 * Improved LDShaderInstance APIs

@@ -3,6 +3,8 @@ package com.lowdragmc.lowdraglib2.client;
 import com.lowdragmc.lowdraglib2.CommonProxy;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.Platform;
+import com.lowdragmc.lowdraglib2.client.font.LDFontManager;
+import com.lowdragmc.lowdraglib2.client.font.LDFontStatsOverlay;
 import com.lowdragmc.lowdraglib2.client.model.ModelFactory;
 import com.lowdragmc.lowdraglib2.client.model.forge.LDLRendererModel;
 import com.lowdragmc.lowdraglib2.client.renderer.ATESRRendererProvider;
@@ -29,6 +31,9 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.config.ModConfig;
+import net.minecraftforge.fml.event.config.ModConfigEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.client.event.*;
 
@@ -37,6 +42,9 @@ public class ClientProxy {
 
     public ClientProxy(IEventBus eventBus) {
         eventBus.register(this);
+        // Forge 1.20.1 无 NeoForge 的 ConfigurationScreen 自动配置界面：只注册配置规格，
+        // 编辑走配置文件（ConfigScreenHandler 需要自建 Screen，本库没有 Forge 版配置界面）。
+        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, LDLibClientConfig.SPEC);
     }
 
     @SubscribeEvent
@@ -75,10 +83,37 @@ public class ClientProxy {
         LDLibShaders.registerShaders(event);
     }
 
+    /**
+     * The client config decides how glyphs are baked, so a change to it invalidates every atlas.
+     * <p>
+     * Only {@code Reloading} matters: at {@code Loading} time nothing has been baked yet. The rebuild is handed
+     * to the client thread because this event is documented to fire on any thread and freeing a texture is not
+     * thread safe.
+     */
+    @SubscribeEvent
+    public void onConfigReloaded(ModConfigEvent.Reloading event) {
+        if (event.getConfig().getSpec() == LDLibClientConfig.SPEC) {
+            Minecraft.getInstance().execute(LDFontManager.INSTANCE::invalidate);
+        }
+    }
+
+    /**
+     * TEMPORARY: development readout, see {@link LDFontStatsOverlay}. Registered above everything so it is not
+     * hidden by the rest of the HUD.
+     */
+    @SubscribeEvent
+    public void registerFontStatsOverlay(RegisterGuiOverlaysEvent event) {
+        if (Platform.isDevEnv()) {
+            // Forge 1.20.1 takes a plain String id here, not a ResourceLocation
+            event.registerAboveAll(LDLib2.id("font_stats").toString(), LDFontStatsOverlay.INSTANCE);
+        }
+    }
+
     @SubscribeEvent
     public void onRegisterClientReloadListenersEvent(RegisterClientReloadListenersEvent event) {
         event.registerReloadListener(PackResourceManager.INSTANCE);
         event.registerReloadListener(StylesheetManager.INSTANCE);
+        event.registerReloadListener(LDFontManager.INSTANCE);
     }
 
     @SubscribeEvent

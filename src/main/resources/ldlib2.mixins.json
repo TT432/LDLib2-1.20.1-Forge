@@ -20,6 +20,7 @@
     "WorldRendererMixin",
     "accessor.FontManagerAccessor",
     "accessor.AbstractContainerScreenAccessor",
+    "accessor.GuiGraphicsAccessor",
     "accessor.MinecraftAccessor",
     "accessor.ModelBakeryAccessor",
     "accessor.MouseHandlerAccessor",

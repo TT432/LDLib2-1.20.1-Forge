@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.editor.ClipboardManager;
 import com.lowdragmc.lowdraglib2.gui.ColorPattern;
 import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
+import com.lowdragmc.lowdraglib2.gui.LDLibFonts;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.data.Cursor;
 import com.lowdragmc.lowdraglib2.gui.ui.data.ScrollDisplay;
@@ -25,6 +26,7 @@ import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegister;
 import com.lowdragmc.lowdraglib2.utils.HistoryStack;
 import com.lowdragmc.lowdraglib2.utils.TextUtilities;
 import com.lowdragmc.lowdraglib2.utils.XmlUtils;
+import com.lowdragmc.lowdraglib2.gui.ui.utils.KeyState;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -514,7 +516,7 @@ public class TextArea extends BindableUIElement<String[]> {
     // Editing helpers
     @OnlyIn(Dist.CLIENT)
     public Font getFont() {
-        return Minecraft.getInstance().font;
+        return LDLibFonts.font();
     }
 
     public float scale() {
@@ -832,14 +834,14 @@ public class TextArea extends BindableUIElement<String[]> {
                 updateSelectionAfterMove();
             }
             default -> {
-                if (Screen.isSelectAll(event.keyCode)) {
+                if (KeyState.isSelectAll(event.keyCode)) {
                     selectAll();
-                } else if (Screen.isCopy(event.keyCode)) {
+                } else if (KeyState.isCopy(event.keyCode)) {
                     ClipboardManager.INSTANCE.copyDirect(getHighlightedText());
-                } else if (Screen.isPaste(event.keyCode)) {
+                } else if (KeyState.isPaste(event.keyCode)) {
                     if (!isEditable()) return;
                     insertText(Minecraft.getInstance().keyboardHandler.getClipboard());
-                } else if (Screen.isCut(event.keyCode)) {
+                } else if (KeyState.isCut(event.keyCode)) {
                     if (!isEditable()) return;
                     ClipboardManager.INSTANCE.copyDirect(getHighlightedText());
                     insertText(""); // replace selection with empty
@@ -1173,7 +1175,8 @@ public class TextArea extends BindableUIElement<String[]> {
             guiContext.pose.pushPose();
             guiContext.pose.translate(drawX, lineY, 0);
             guiContext.pose.scale(scale, scale, 1);
-            guiContext.graphics.drawString(
+            LDLibFonts.drawText(
+                    guiContext.graphics,
                     font,
                     textWithFont,
                     0,
@@ -1195,7 +1198,8 @@ public class TextArea extends BindableUIElement<String[]> {
         guiContext.pose.pushPose();
         guiContext.pose.translate(x, y, 0);
         guiContext.pose.scale(scale, scale, 1);
-        guiContext.graphics.drawString(
+        LDLibFonts.drawText(
+                guiContext.graphics,
                 font,
                 textAreaStyle.placeholder(),
                 0,

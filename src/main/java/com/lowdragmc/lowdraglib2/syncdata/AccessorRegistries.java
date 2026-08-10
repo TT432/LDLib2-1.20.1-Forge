@@ -10,6 +10,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.data.LengthPercent;
 import com.lowdragmc.lowdraglib2.gui.ui.data.Pivot;
 import com.lowdragmc.lowdraglib2.gui.ui.data.Translate2D;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
+import com.lowdragmc.lowdraglib2.math.HDRColor;
 import com.lowdragmc.lowdraglib2.math.Position;
 import com.lowdragmc.lowdraglib2.math.Range;
 import com.lowdragmc.lowdraglib2.math.Size;
@@ -253,13 +254,10 @@ public class AccessorRegistries {
         registerAccessor(RegistryAccessor.of((Class<BlockEntityType<?>>)(Class<?>)BlockEntityType.class, BuiltInRegistries.BLOCK_ENTITY_TYPE));
         registerAccessor(CustomDirectAccessor.builder(UUID.class)
                 .codec(LDLibExtraCodecs.UUID)
-                .streamCodec(StreamCodec.of(
-                        (byteBuf, uuid) -> {
-                            byteBuf.writeLong(uuid.getMostSignificantBits());
-                            byteBuf.writeLong(uuid.getLeastSignificantBits());
-                        },
-                        byteBuf -> new UUID(byteBuf.readLong(), byteBuf.readLong())
-                ))
+                // 1.20.1 无 UUIDUtil.STREAM_CODEC；writeUUID/readUUID 与原版同为两个 long，线上格式一致
+                .streamCodec((StreamCodec<RegistryFriendlyByteBuf, UUID>) StreamCodec.of(
+                        (RegistryFriendlyByteBuf byteBuf, UUID uuid) -> byteBuf.writeUUID(uuid),
+                        RegistryFriendlyByteBuf::readUUID))
                 .build());
         registerAccessor(CustomDirectAccessor.builder(BlockState.class)
                 .codec(BlockState.CODEC)
@@ -292,6 +290,11 @@ public class AccessorRegistries {
         registerAccessor(CustomDirectAccessor.builder(Range.class)
                 .codec(Range.CODEC)
                 .streamCodec(Range.STREAM_CODEC)
+                .build());
+        registerAccessor(CustomDirectAccessor.builder(HDRColor.class)
+                .codec(HDRColor.CODEC)
+                .streamCodec(HDRColor.STREAM_CODEC)
+                .copyMark(HDRColor::new)
                 .build());
         registerAccessor(CustomDirectAccessor.builder(ResourceLocation.class)
                 .codec(ResourceLocation.CODEC)

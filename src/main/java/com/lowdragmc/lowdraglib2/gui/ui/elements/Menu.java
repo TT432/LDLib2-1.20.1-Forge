@@ -110,6 +110,12 @@ public class Menu<K, T> extends UIElement {
     protected Consumer<ITreeNode<K, T>> onNodeClicked;
     @Setter
     protected boolean autoClose = true;
+    /**
+     * Whether picking a leaf closes the menu. Turn it off for a menu whose entries toggle something, so
+     * several can be ticked in one go; it still closes when it loses focus.
+     */
+    @Setter
+    protected boolean closeOnClick = true;
     @Getter
     protected final Map<ITreeNode<K, T>, UIElement> nodeUIs = new LinkedHashMap<>();
     @Setter
@@ -275,7 +281,7 @@ public class Menu<K, T> extends UIElement {
                                     if (onNodeClicked != null) {
                                         onNodeClicked.accept(child);
                                     }
-                                    if (autoClose) {
+                                    if (autoClose && closeOnClick) {
                                         close();
                                     }
                                 } else {
@@ -324,6 +330,7 @@ public class Menu<K, T> extends UIElement {
         opened.parentMenu = this;
         opened.rootPopup = true;
         opened.setAutoClose(autoClose);
+        opened.setCloseOnClick(closeOnClick);
         opened.getMenuStyle().copyFrom(menuStyle);
         opened.setTextureProvider(textureProvider);
         opened.setHoverTextureProvider(hoverTextureProvider);
@@ -348,7 +355,7 @@ public class Menu<K, T> extends UIElement {
             if (onNodeClicked != null) {
                 onNodeClicked.accept(node);
             }
-            if (autoClose){
+            if (autoClose && closeOnClick){
                 close();
             }
         });

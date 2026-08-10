@@ -10,6 +10,8 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
 import javax.annotation.ParametersAreNonnullByDefault;
+import java.nio.file.Path;
+import java.util.List;
 
 @OnlyIn(Dist.CLIENT)
 @ParametersAreNonnullByDefault
@@ -48,4 +50,10 @@ public class ModularUIContainerScreen extends AbstractContainerScreen<ModularUIC
 
     }
 
+    @Override
+    public void onFilesDrop(List<Path> paths) {
+        if (!getMenu().getModularUI().onFilesDrop(paths.stream().map(Path::toFile).toList())) {
+            super.onFilesDrop(paths);
+        }
+    }
 }

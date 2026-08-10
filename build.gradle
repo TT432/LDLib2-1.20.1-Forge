@@ -214,6 +214,8 @@ tasks.configureEach {
 
 tasks.named('sourcesJar') {
     dependsOn tasks.named('vendorTaffyClasses')
+    dependsOn tasks.named('vendorFreetypeClasses')
+    dependsOn tasks.named('vendorFreetypeNatives')
 }
 
 // In-client UI test harness: -PldTest wiring plus the verifyUiTest gate.

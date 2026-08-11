@@ -416,6 +416,11 @@ public class GraphEditorView extends View implements SubgraphRegistry.Listener {
         SubgraphRegistry.INSTANCE.unregisterListener(this);
     }
 
+    /** 上次脏检查时的模型变更计数（见 {@link GraphView#getModelChangeCounter()}）。 */
+    private long lastDirtyCheckChangeCounter = -1;
+    /** 无变更时的兜底全量对比间隔（tick）：防计数遗漏的静默变更。 */
+    private static final long DIRTY_CHECK_FALLBACK_INTERVAL = 600;
+
     @Override
     public void screenTick() {
         super.screenTick();
@@ -423,7 +428,15 @@ public class GraphEditorView extends View implements SubgraphRegistry.Listener {
         // last-saved snapshot. Brute-force comparison; can be optimized later if it shows up.
         if (!isDirty) {
             var mui = getModularUI();
-            if (mui != null && (mui.getTickCounter() & 20) == 0) {
+            if (mui != null && mui.getTickCounter() % 20 == 0) {
+                // 门控：模型自上次对比以来无变更则跳过全图序列化（原实现 ~75% 的 tick 都在序列化——
+                // (tickCounter & 20) == 0 是位掩码笔误；且即使频率正确，无变更期的序列化也是纯浪费）。
+                long counter = graphView.getModelChangeCounter();
+                boolean fallback = mui.getTickCounter() % DIRTY_CHECK_FALLBACK_INTERVAL == 0;
+                if (!fallback && counter == lastDirtyCheckChangeCounter) {
+                    return;
+                }
+                lastDirtyCheckChangeCounter = counter;
                 var level = getCurrentLevel();
                 if (level.externalPath != null && level.graphRef != null) {
                     var tag = serializeLevelGraph(level);

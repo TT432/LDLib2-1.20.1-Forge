@@ -141,6 +141,12 @@ public class GraphView extends UIElement {
     protected boolean isWireDragging = false;
     @Getter
     protected HistoryStack historyStack = new HistoryStack();
+    /**
+     * 模型变更计数：updateGraphModelChanges 消费到非空 changeset 时 +1。
+     * 供 GraphEditorView 的脏检查跳过「无变更」期间的序列化对比（序列化 645 节点图是渲染线程实测热点）。
+     */
+    @Getter
+    private long modelChangeCounter;
     private List<GraphLogger.Entry> graphLogEntries = List.of();
     private boolean graphLogExpanded = false;
 
@@ -1595,6 +1601,7 @@ public class GraphView extends UIElement {
         changeset.addDeletedModels(changes.getDeletedModels());
         var somethingChanged = changeset.hasChanges();
         if (somethingChanged) {
+            modelChangeCounter++;
             var newPlacemats = new ArrayList<GraphElement<?>>();
             var changedModels = new HashMap<UUID, ChangeHintList>();
 

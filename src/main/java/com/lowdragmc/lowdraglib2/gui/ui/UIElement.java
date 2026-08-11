@@ -162,7 +162,17 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
     });
     @Nullable
     private UIElement[] sortedChildrenCache = null;
+    @Nullable
+    private List<UIElement> safeChildrenCache = null;
     private ImmutableList<UIElement> structurePathCache = null;
+    /**
+     * hitTest/绘制热路径的 StyleBag 派生值缓存：bit0=opacity>0, bit1=overflowVisible, bit2=transform2D 恒等。
+     * -1 = 脏。StyleBag 的一切变更都经 {@link #onStyleChanged()} 失效（putCandidate 系列方法全走那里）。
+     */
+    private byte hitStyleSummary = -1;
+    private int zIndexSummary;
+    /** screenTick 的 TICK 监听器存在性缓存（add/removeEventListener 时重算，替代每元素每 tick 两次 HashMap 查询）。 */
+    private boolean hasTickListeners;
     private FloatOptional positionXCache = FloatOptional.of();
     private FloatOptional positionYCache = FloatOptional.of();
     @Nullable
@@ -667,7 +677,11 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
     }
     
     public List<UIElement> getSafeChildren() {
-        return List.copyOf(children);
+        // 与 sortedChildrenCache 同模式：结构未变时复用快照（每元素每 tick 的 List.copyOf 在大 UI 树下是实测热点）
+        if (safeChildrenCache == null) {
+            safeChildrenCache = List.copyOf(children);
+        }
+        return safeChildrenCache;
     }
 
     public Stream<UIElement> selfAndAllChildren() {
@@ -751,6 +765,9 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
         children.add(index, child);
         child._setModularUIInternal(this.modularUI);
         clearSortedChildrenCache();
+        if (modularUI != null) {
+            modularUI.bumpHoverEpoch();
+        }
         child.clearStructurePathCache();
         child.onAdded();
         return this;
@@ -794,6 +811,9 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
         child._setModularUIInternal(null);
         child.parent = null;
         clearSortedChildrenCache();
+        if (modularUI != null) {
+            modularUI.bumpHoverEpoch();
+        }
         child.clearStructurePathCache();
         return true;
     }
@@ -1036,6 +1056,12 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
      * This method is called when the style of the element has changed.
      */
     public void onStyleChanged() {
+        hitStyleSummary = -1;
+        var mui = modularUI;
+        if (mui != null) {
+            // 样式变化可能改几何/可见性 → 悬停缓存失效（见 ModularUI.refreshHoveredElement 的纪元检查）
+            mui.bumpHoverEpoch();
+        }
         if (bubbleListeners.containsKey(UIEvents.STYLE_CHANGED) || captureListeners.containsKey(UIEvents.STYLE_CHANGED)) {
             var event = UIEvent.create(UIEvents.STYLE_CHANGED);
             event.target = this;
@@ -1250,6 +1276,7 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
 
     public void clearSortedChildrenCache() {
         sortedChildrenCache = null;
+        safeChildrenCache = null;
     }
 
     public final int getSiblingIndex() {
@@ -1280,6 +1307,18 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
         }
     }
 
+    private byte hitStyleSummary() {
+        byte s = hitStyleSummary;
+        if (s < 0) {
+            s = (byte) ((getStyle().opacity() > 0 ? 1 : 0)
+                    | (style.overflowVisible() ? 2 : 0)
+                    | (style.transform2D().isIdentity() ? 4 : 0));
+            zIndexSummary = style.zIndex();
+            hitStyleSummary = s;
+        }
+        return s;
+    }
+
     /**
      * Do hit-testing here. Get the element which is hovered by the mouse.
      * The mouse here is already transformed.
@@ -1289,21 +1328,33 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
     @Nullable
     public final Pair<UIElement, Integer> hitTest(double mouseX, double mouseY) {
         // TODO do hit tree in the future?
-        if (!isDisplayed() || !isVisible() || getStyle().opacity() <= 0) return null;
+        byte summary = hitStyleSummary();
+        if (!isDisplayed() || !isVisible() || (summary & 1) == 0) return null;
 
-        var transform2D = style.transform2D();
-        double[] pt = new double[]{mouseX, mouseY};
-        if (!transform2D.isIdentity()) {
-            transform2D.inversePoint(this, pt);
+        double localMouseX = mouseX;
+        double localMouseY = mouseY;
+        if ((summary & 4) == 0) {
+            // 恒等变换是绝大多数：只在需要时分配并反解
+            double[] pt = new double[]{mouseX, mouseY};
+            style.transform2D().inversePoint(this, pt);
+            localMouseX = pt[0];
+            localMouseY = pt[1];
         }
-        double localMouseX = pt[0];
-        double localMouseY = pt[1];
 
         Pair<UIElement, Integer> hover = null;
-        var hidden = !style.overflowVisible();
+        var hidden = (summary & 2) == 0;
 
-        if (!hidden || isMouseOverRect(getContentX(), getContentY(), getContentWidth(), getContentHeight(), mouseX, mouseY)) {
+        if (!hidden || isMouseOverRect(getContentX(), getContentY(), getContentWidth(), getContentHeight(), localMouseX, localMouseY)) {
             for (var child : getSafeSortedChildren()) {
+                // 剪枝：overflow 隐藏且变换恒等的子元素，点在其包围盒外时 hitTest 必然返回 null——
+                // 子树递归以 content 矩形为门槛（⊆ 包围盒），自检以包围盒为门槛，点在外两者皆空。
+                // 大 UI 树（节点图编辑器 3 万元素）下把密集容器（面板）遍历降为路径级。
+                byte cs = child.hitStyleSummary();
+                if ((cs & 2) == 0 && (cs & 4) != 0
+                        && !isMouseOverRect(child.getPositionX(), child.getPositionY(),
+                                child.getSizeWidth(), child.getSizeHeight(), localMouseX, localMouseY)) {
+                    continue;
+                }
                 var result = child.hitTest(localMouseX, localMouseY);
                 if (result != null && (hover == null || hover.getB() < result.getB())) {
                     hover = result;
@@ -1312,11 +1363,11 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
         }
 
         if (hover == null && isAllowHitTest() && isIntersectWithPoint(localMouseX, localMouseY)) {
-            return new Pair<>(this, style.zIndex());
+            return new Pair<>(this, zIndexSummary);
         }
 
         if (hover == null) return null;
-        return new Pair<>(hover.getA(), hover.getB() + style.zIndex());
+        return new Pair<>(hover.getA(), hover.getB() + zIndexSummary);
     }
 
     /**
@@ -1413,7 +1464,7 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
                 child.screenTick();
             }
         }
-        if (bubbleListeners.containsKey(UIEvents.TICK) || captureListeners.containsKey(UIEvents.TICK)) {
+        if (hasTickListeners) {
             var event = UIEvent.create(UIEvents.TICK);
             event.target = this;
             event.hasBubblePhase = false;
@@ -1454,6 +1505,9 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
             captureListeners.computeIfAbsent(eventType, k -> new ArrayList<>()).add(0, listener);
         } else {
             bubbleListeners.computeIfAbsent(eventType, k -> new ArrayList<>()).add(0, listener);
+        }
+        if (UIEvents.TICK.equals(eventType)) {
+            hasTickListeners = true;
         }
         return this;
     }
@@ -1502,6 +1556,9 @@ public class UIElement implements IConfigurable, IPersistedSerializable, ILDLReg
         }
         if (listeners != null) {
             listeners.remove(listener);
+        }
+        if (UIEvents.TICK.equals(eventType)) {
+            hasTickListeners = bubbleListeners.containsKey(UIEvents.TICK) || captureListeners.containsKey(UIEvents.TICK);
         }
     }
 

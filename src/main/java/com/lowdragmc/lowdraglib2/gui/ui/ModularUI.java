@@ -139,6 +139,22 @@ public class ModularUI {
     private UIElement lastHoveredElement;
     @Getter
     private final List<UIElement> lastHoveredElements = new ArrayList<>();
+    /**
+     * 悬停纪元：结构（add/removeChild）、样式（onStyleChanged）、几何（taffy 布局变更）任一变化 +1。
+     * {@link #refreshHoveredElement} 用它与光标坐标一起做跳过判定——三者都未变时全树 hitTest 结果必然相同。
+     */
+    @Getter
+    private int hoverEpoch;
+    /** 注册表结构纪元：元素注册/注销 +1，供按元素集合缓存的逻辑（如字体设置应用）做廉价变更检测。 */
+    @Getter
+    private int structureEpoch;
+    private float lastHoverRefreshX = Float.NaN;
+    private float lastHoverRefreshY = Float.NaN;
+    private int lastHoverRefreshEpoch = -1;
+
+    public void bumpHoverEpoch() {
+        hoverEpoch++;
+    }
     @Getter
     private UIElement lastMouseDownElement;
     @Getter
@@ -191,6 +207,7 @@ public class ModularUI {
             nodesWithNewLayout.add(nodeId);
             if (Objects.equals(oldLayout, newLayout)) return;
             nodesWithNewGeometry.add(nodeId);
+            bumpHoverEpoch();
         });
         this.syncManager = new UISyncManager(this);
         this.styleEngine.addStylesheets(this.ui.getStylesheets());
@@ -213,6 +230,7 @@ public class ModularUI {
     public void registerElement(@Nullable UIElement element) {
         if (element == null) return;
         elements.add(element);
+        structureEpoch++;
 
         // Add Layout Node
         element.nodeId = taffyTree.newLeaf(element.getTaffyStyle().style);
@@ -246,6 +264,7 @@ public class ModularUI {
      */
     public void unregisterElement(@Nullable UIElement element) {
         if (element == null) return;
+        structureEpoch++;
 
         // Remove StyleEngine
         styleEngine.onElementUnregister(element);
@@ -739,6 +758,15 @@ public class ModularUI {
     public void refreshHoveredElement(float localMouseX, float localMouseY) {
         lastMouseX = localMouseX;
         lastMouseY = localMouseY;
+
+        // 光标未动且树的几何/结构/样式均未变 → hitTest 结果必然相同，跳过全树遍历
+        if (localMouseX == lastHoverRefreshX && localMouseY == lastHoverRefreshY
+                && hoverEpoch == lastHoverRefreshEpoch) {
+            return;
+        }
+        lastHoverRefreshX = localMouseX;
+        lastHoverRefreshY = localMouseY;
+        lastHoverRefreshEpoch = hoverEpoch;
 
         var hoverElement = ui.rootElement.hitTest(lastMouseX, lastMouseY);
         var newHoveredElement = hoverElement == null ? null : hoverElement.getA();

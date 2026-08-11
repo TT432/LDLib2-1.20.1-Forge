@@ -286,9 +286,15 @@ public class LDFontSet extends FontSet {
         } else {
             bakedRasterCount++;
         }
+        // 原版 BakedGlyph.render 绘制时用 up/down - 3f 定位（基线约定），这里 +3f 抵消，
+        // 否则所有经 LD 字体管线绘制的文本会比原版同一 y 原点偏高 3px（实机像素级实证：
+        // LD 墨色 = origin-3..origin+3.5，原版 = origin+0..origin+6.5）。
         return new BakedGlyph(slot.page().renderTypes(), slot.u0(), slot.u1(), slot.v0(), slot.v1(),
-                raw.left(), raw.right(), raw.top(), raw.bottom());
+                raw.left(), raw.right(), raw.top() + VANILLA_BASELINE_SHIFT, raw.bottom() + VANILLA_BASELINE_SHIFT);
     }
+
+    /** 原版 {@link BakedGlyph#render} 对 up/down 固定减 3 的补偿量。 */
+    private static final float VANILLA_BASELINE_SHIFT = 3f;
 
     /**
      * Forgets the glyphs baked for one size, called when that size's atlas is evicted.

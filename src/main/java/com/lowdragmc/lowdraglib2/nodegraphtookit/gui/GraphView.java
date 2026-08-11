@@ -174,10 +174,6 @@ public class GraphView extends UIElement {
 
         // canvas
         canvas.addClass("__node-graph-view_canvas__");
-        // 画布默认不透明底（与 lss `.__node-graph-view_canvas__ { background: #191919 }` 同色）：
-        // 2.2.34 dock 化后 GraphPanel 不再铺满画布，无样式表环境下画布透出世界，此处给代码兜底默认
-        Style.defaultPipeline(canvas.getStyle(), s -> s.backgroundTexture(
-                new com.lowdragmc.lowdraglib2.gui.texture.ColorRectTexture(0xFF191919)));
         Style.defaultPipeline(canvas.getLayout(), l -> l.widthPercent(100).flex(1));
 
         graphView.addEventListener(UIEvents.MOUSE_DOWN, this::onGraphViewMouseDown);

@@ -178,11 +178,8 @@ public final class PropertyRegistry {
      * given level always means the same apparent size no matter what GUI scale the user runs at.
      * <p>
      * 0.65 puts a 9-unit text line at ~6px — the point where it stops being readable.
-     * <p>
-     * Capped at 1 px/unit: past that a 9-unit text line is ≥9 physical px — comfortably readable —
-     * so a higher threshold would force SIMPLIFIED at zooms where nothing is actually illegible.
      */
-    public static final Property<Float> LOD_SIMPLIFIED_PIXEL_SCALE = create("lod-simplified-pixel-scale", 0.65f).setRange(0f, 1f);
+    public static final Property<Float> LOD_SIMPLIFIED_PIXEL_SCALE = create("lod-simplified-pixel-scale", 0.65f).setMin(0f);
     /** 0.25 puts a 12-unit title bar at ~3px — the point where a node stops having visible parts. */
     public static final Property<Float> LOD_BLOCK_PIXEL_SCALE = create("lod-block-pixel-scale", 0.25f).setMin(0f);
 

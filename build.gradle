@@ -38,7 +38,6 @@ configurations {
     compileOnly.extendsFrom localImplementation
 
     yogaSources
-    taffyLibrary
     // LWJGL FreeType：MC 1.21 原版自带该模块，1.20.1 无——上游 2.2.34 字体系统（SDF）需要。
     // 类与 taffy 同法 vendored；natives dll 解到资源根（LWJGL 支持从 classpath 提取加载）。
     lwjglFreetype
@@ -141,7 +140,6 @@ mixin {
 
 sourceSets.main.resources {
     srcDir 'src/generated/resources'
-    srcDir(layout.buildDirectory.dir("generated/resources/taffy"))
     srcDir(layout.buildDirectory.dir("generated/resources/freetype"))
 }
 sourceSets.main.kotlin { srcDir("src/main/java") }
@@ -163,21 +161,12 @@ tasks.named('compileKotlin') {
     dependsOn tasks.named('extractYogaSources')
 }
 
-tasks.register('vendorTaffyClasses', Copy) {
-    from {
-        zipTree(configurations.taffyLibrary.singleFile)
-    }
-    include '**/*.class'
-    exclude 'module-info.class'
-    into layout.buildDirectory.dir("generated/resources/taffy")
-}
-
 tasks.register('vendorFreetypeClasses', Copy) {
     from {
         zipTree(configurations.lwjglFreetype.singleFile)
     }
     include '**/*.class'
-    exclude 'module-info.class'
+    exclude '**/module-info.class'
     into layout.buildDirectory.dir("generated/resources/freetype")
 }
 
@@ -195,10 +184,6 @@ tasks.named('processResources') {
     dependsOn tasks.named('vendorFreetypeNatives')
 }
 
-tasks.named('processResources') {
-    dependsOn tasks.named('vendorTaffyClasses')
-}
-
 tasks.register('syncMixinRefmapForRuns', Copy) {
     dependsOn tasks.named('processResources')
     dependsOn tasks.named('compileJava')
@@ -213,7 +198,6 @@ tasks.configureEach {
 }
 
 tasks.named('sourcesJar') {
-    dependsOn tasks.named('vendorTaffyClasses')
     dependsOn tasks.named('vendorFreetypeClasses')
     dependsOn tasks.named('vendorFreetypeNatives')
 }
@@ -271,10 +255,13 @@ dependencies {
     yogaSources("org.appliedenergistics.yoga:yoga:${yoga_version}:sources@jar")
     compileOnly "org.jetbrains:annotations:24.1.0"
 
-    // Taffy
+        // Taffy：JarJar 内嵌（同上游 1.21.1 :all），由 FML 版本协商去重；
+    // 不做类级 vendor——否则与其它 mod jarJar 内嵌的 taffy 模块重复导出
+    // dev.vfyjxf.taffy.* 包，JPMS split-package 直接启动崩溃。
     libraries("dev.vfyjxf:taffy:${taffy_version}")
-    taffyLibrary("dev.vfyjxf:taffy:${taffy_version}") {
+    jarJar("dev.vfyjxf:taffy:${taffy_version}") {
         transitive = false
+        jarJar.ranged(it, "[${taffy_version},)")
     }
 
     // LWJGL FreeType。MC 1.20.1 自带的 LWJGL 是 3.3.1，但 org.lwjgl:lwjgl-freetype 从 3.3.2 才

@@ -337,6 +337,22 @@ publishing {
             from components.java
         }
     }
+}
+// -all（reobfJarJar 产物：SRG 名 + jarjar 内嵌 taffy/mixinextras）以 classifier 发布。
+// 消费方（eyelib）生产 jar 需要内嵌 SRG 形态——plain jar 是 mojmap 开发形态，
+// 内嵌后 mixin @Overwrite 找不到 SRG 目标直接启动崩溃（2026-08-25 实证）。
+// FG6 在 afterEvaluate 才注册 reobfJarJar，挂接必须同步延后。
+afterEvaluate {
+    publishing.publications.named('mavenJava', MavenPublication) {
+        artifact(file("${layout.buildDirectory.get().asFile}/libs/${base.archivesName.get()}-${version}-all.jar")) {
+            classifier = 'all'
+            builtBy tasks.named('reobfJarJar')
+        }
+    }
+}
+publishing {
+    repositories {
+    }
     repositories {
         maven {
             name = "GitHubPackages"
